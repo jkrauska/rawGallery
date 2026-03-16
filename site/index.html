@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gallery</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <div class="login-container" x-data="loginApp()">
+    <div class="login-card card">
+      <h1 class="text-headline" x-text="siteName"></h1>
+      <p class="subtitle">Enter your access code to view photos</p>
+
+      <template x-if="errorMsg">
+        <p class="login-error" x-text="errorMsg"></p>
+      </template>
+
+      <form @submit.prevent="login">
+        <input
+          type="password"
+          class="input"
+          placeholder="Access code"
+          x-model="password"
+          autocomplete="current-password"
+          autofocus
+        >
+        <button type="submit" class="btn btn-primary" :disabled="loading">
+          <span x-show="!loading">Enter</span>
+          <span x-show="loading">...</span>
+        </button>
+      </form>
+
+      <a href="/upload.html" class="text-small" style="display:inline-block;margin-top:1.5rem;color:rgb(var(--text-muted));text-decoration:none;">Admin</a>
+    </div>
+  </div>
+
+  <script>
+    function loginApp() {
+      return {
+        siteName: 'Gallery',
+        password: '',
+        loading: false,
+        errorMsg: '',
+
+        async init() {
+          try {
+            const res = await fetch('/api/session');
+            const data = await res.json();
+            if (data.authenticated) {
+              this.redirectToGallery();
+              return;
+            }
+            if (data.siteName) this.siteName = data.siteName;
+          } catch {}
+
+          try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (data.siteName) this.siteName = data.siteName;
+          } catch {}
+        },
+
+        redirectToGallery() {
+          const returnHash = sessionStorage.getItem('rg_returnHash');
+          sessionStorage.removeItem('rg_returnHash');
+          window.location.href = '/gallery.html' + (returnHash || '');
+        },
+
+        async login() {
+          this.errorMsg = '';
+          if (!this.password.trim()) {
+            this.errorMsg = 'Please enter an access code';
+            return;
+          }
+          this.loading = true;
+          try {
+            const res = await fetch('/api/auth', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ password: this.password }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+              this.redirectToGallery();
+            } else {
+              this.errorMsg = data.error || 'Invalid access code';
+            }
+          } catch {
+            this.errorMsg = 'Connection error. Please try again.';
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

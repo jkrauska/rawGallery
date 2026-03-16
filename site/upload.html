@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Upload Photos</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="uploadApp()" x-init="init()">
+  <div class="container">
+    <header class="site-header">
+      <a href="/gallery.html" class="site-title">Admin Upload</a>
+      <div class="header-actions">
+        <a href="/gallery.html" class="btn btn-sm btn-secondary">Back to Gallery</a>
+      </div>
+    </header>
+
+    <!-- Admin token -->
+    <template x-if="!authenticated">
+      <div class="login-container" style="min-height:auto;padding-top:4rem;">
+        <div class="login-card card" style="max-width:500px;">
+          <h2 class="text-title" style="margin-bottom:1rem;">Admin Access</h2>
+          <input type="password" class="input" placeholder="Admin token" x-model="adminToken" @keyup.enter="checkAdmin" autofocus>
+          <button class="btn btn-primary" style="margin-top:0.75rem;width:100%;" @click="checkAdmin">Authenticate</button>
+          <template x-if="authError">
+            <p class="login-error" style="margin-top:0.75rem;" x-text="authError"></p>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- Upload form -->
+    <template x-if="authenticated">
+      <div class="fade-in">
+        <!-- Create new items (above selector) -->
+        <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary" @click="showCreateSpace = !showCreateSpace">+ New Space</button>
+          <button class="btn btn-sm btn-secondary" @click="showCreateGallery = !showCreateGallery">+ New Gallery</button>
+          <button class="btn btn-sm btn-secondary" @click="showCreateEvent = !showCreateEvent">+ New Event</button>
+        </div>
+
+        <!-- Create space form -->
+        <template x-if="showCreateSpace">
+          <div class="surface" style="padding:1.25rem;margin-bottom:1rem;">
+            <h3 class="text-heading" style="margin-bottom:0.75rem;">Create Space</h3>
+            <div style="display:flex;gap:0.75rem;align-items:end;">
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Name</label>
+                <input class="input" x-model="newSpaceName" placeholder="Space name">
+              </div>
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Viewer Password</label>
+                <input class="input" x-model="newSpacePassword" placeholder="Password viewers will use">
+              </div>
+              <button class="btn btn-primary btn-sm" @click="createSpace">Create</button>
+            </div>
+            <template x-if="createSpaceResult">
+              <p class="text-small" style="margin-top:0.5rem;color:rgb(var(--success));" x-text="createSpaceResult"></p>
+            </template>
+          </div>
+        </template>
+
+        <!-- Create gallery form -->
+        <template x-if="showCreateGallery">
+          <div class="surface" style="padding:1.25rem;margin-bottom:1rem;">
+            <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.75rem;">
+              <h3 class="text-heading">Create Gallery</h3>
+              <template x-if="selectedSpaceName">
+                <span class="text-small">in <strong x-text="selectedSpaceName"></strong></span>
+              </template>
+              <template x-if="!spaceId">
+                <span class="text-small" style="color:rgb(var(--danger));">&#9888; Select a space first</span>
+              </template>
+            </div>
+            <div style="display:flex;gap:0.75rem;align-items:end;">
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Title</label>
+                <input class="input" x-model="newGalleryTitle" placeholder="Gallery title">
+              </div>
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Description</label>
+                <input class="input" x-model="newGalleryDesc" placeholder="Optional description">
+              </div>
+              <button class="btn btn-primary btn-sm" @click="createGallery" :disabled="!spaceId">Create</button>
+            </div>
+            <template x-if="createGalleryResult">
+              <p class="text-small" style="margin-top:0.5rem;color:rgb(var(--success));" x-text="createGalleryResult"></p>
+            </template>
+          </div>
+        </template>
+
+        <!-- Create event form -->
+        <template x-if="showCreateEvent">
+          <div class="surface" style="padding:1.25rem;margin-bottom:1rem;">
+            <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.75rem;">
+              <h3 class="text-heading">Create Event</h3>
+              <template x-if="selectedSpaceName && selectedGalleryTitle">
+                <span class="text-small">in <strong x-text="selectedSpaceName"></strong> / <strong x-text="selectedGalleryTitle"></strong></span>
+              </template>
+              <template x-if="!spaceId || !gallerySlug">
+                <span class="text-small" style="color:rgb(var(--danger));">&#9888; Select a space and gallery first</span>
+              </template>
+            </div>
+            <div style="display:flex;gap:0.75rem;align-items:end;">
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Title</label>
+                <input class="input" x-model="newEventTitle" placeholder="Event title">
+              </div>
+              <div style="flex:1;">
+                <label class="text-label" style="display:block;margin-bottom:0.25rem;">Date</label>
+                <input class="input" type="date" x-model="newEventDate">
+              </div>
+              <button class="btn btn-primary btn-sm" @click="createEvent" :disabled="!spaceId || !gallerySlug">Create</button>
+            </div>
+            <template x-if="createEventResult">
+              <p class="text-small" style="margin-top:0.5rem;color:rgb(var(--success));" x-text="createEventResult"></p>
+            </template>
+          </div>
+        </template>
+
+        <!-- Space / Gallery / Event selector (cascading dropdowns) -->
+        <div class="surface" style="padding:1.5rem;margin-bottom:1.5rem;">
+          <h3 class="text-heading" style="margin-bottom:0.75rem;">Upload Target</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+            <div>
+              <label class="text-label" style="display:block;margin-bottom:0.375rem;">Space</label>
+              <div style="display:flex;gap:0.25rem;">
+                <select class="input" x-model="spaceId" @change="onSpaceChange()" style="flex:1;">
+                  <option value="">-- Select space --</option>
+                  <template x-for="s in spacesList" :key="s.id">
+                    <option :value="s.id" x-text="s.name + ' (' + (s.galleryCount || 0) + ' galleries)'"></option>
+                  </template>
+                </select>
+                <button x-show="spaceId" class="btn btn-sm" style="padding:0.3rem 0.45rem;color:rgb(var(--danger));background:transparent;border:1px solid rgba(var(--danger),0.3);" @click="confirmDeleteSpace()" title="Delete space">&#128465;</button>
+              </div>
+            </div>
+            <div>
+              <label class="text-label" style="display:block;margin-bottom:0.375rem;">Gallery</label>
+              <div style="display:flex;gap:0.25rem;">
+                <select class="input" x-model="gallerySlug" @change="onGalleryChange()" :disabled="!spaceId" style="flex:1;">
+                  <option value="">-- Select gallery --</option>
+                  <template x-for="g in galleriesList" :key="g.slug">
+                    <option :value="g.slug" x-text="g.title + ' (' + (g.eventCount || 0) + ' events)'"></option>
+                  </template>
+                </select>
+                <button x-show="gallerySlug" class="btn btn-sm" style="padding:0.3rem 0.45rem;color:rgb(var(--danger));background:transparent;border:1px solid rgba(var(--danger),0.3);" @click="confirmDeleteGallery()" title="Delete gallery">&#128465;</button>
+              </div>
+            </div>
+            <div>
+              <label class="text-label" style="display:block;margin-bottom:0.375rem;">Event</label>
+              <div style="display:flex;gap:0.25rem;">
+                <select class="input" x-model="eventSlug" @change="localStorage.setItem('rg_eventSlug', eventSlug)" :disabled="!gallerySlug" style="flex:1;">
+                  <option value="">-- Select event --</option>
+                  <template x-for="e in eventsList" :key="e.slug">
+                    <option :value="e.slug" x-text="e.title + (e.date ? ' ' + e.date : '') + ' (' + (e.photoCount || 0) + ' photos)'"></option>
+                  </template>
+                </select>
+                <button x-show="eventSlug" class="btn btn-sm" style="padding:0.3rem 0.45rem;color:rgb(var(--danger));background:transparent;border:1px solid rgba(var(--danger),0.3);" @click="confirmDeleteEvent()" title="Delete event">&#128465;</button>
+              </div>
+            </div>
+          </div>
+          <!-- Summary counts -->
+          <template x-if="spaceId">
+            <div style="margin-top:0.75rem;display:flex;gap:1.5rem;flex-wrap:wrap;">
+              <span class="text-small" style="opacity:0.7;" x-text="(selectedSpaceObj?.galleryCount || 0) + ' galleries'"></span>
+              <template x-if="gallerySlug">
+                <span class="text-small" style="opacity:0.7;" x-text="(selectedGalleryObj?.eventCount || 0) + ' events in ' + (selectedGalleryObj?.title || '')"></span>
+              </template>
+              <template x-if="eventSlug">
+                <span class="text-small" style="opacity:0.7;" x-text="(selectedEventObj?.photoCount || 0) + ' photos in ' + (selectedEventObj?.title || '')"></span>
+              </template>
+            </div>
+          </template>
+
+          <!-- Space password display (shown when a space is selected) -->
+          <template x-if="spaceId && selectedSpacePassword">
+            <div style="margin-top:0.75rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <span class="text-label" style="white-space:nowrap;">Viewer Password:</span>
+              <div style="display:flex;align-items:center;gap:0.25rem;flex:1;min-width:200px;max-width:360px;">
+                <template x-if="!editingPassword">
+                  <div style="display:flex;align-items:center;gap:0.25rem;flex:1;">
+                    <input class="input" :type="showSpacePassword ? 'text' : 'password'" :value="selectedSpacePassword" readonly style="flex:1;cursor:default;opacity:0.9;">
+                    <button class="btn btn-sm btn-secondary" @click="showSpacePassword = !showSpacePassword" :title="showSpacePassword ? 'Hide' : 'Show'" style="padding:0.3rem 0.5rem;font-size:1.1rem;line-height:1;">
+                      <span x-text="showSpacePassword ? '&#128064;' : '&#128065;'"></span>
+                    </button>
+                    <button class="btn btn-sm btn-secondary" @click="editingPassword = true; editPasswordValue = selectedSpacePassword" title="Change password" style="padding:0.3rem 0.5rem;font-size:0.85rem;">&#9998;</button>
+                  </div>
+                </template>
+                <template x-if="editingPassword">
+                  <div style="display:flex;align-items:center;gap:0.25rem;flex:1;">
+                    <input class="input" type="text" x-model="editPasswordValue" style="flex:1;" @keyup.enter="saveSpacePassword" @keyup.escape="editingPassword = false" x-ref="pwEdit">
+                    <button class="btn btn-sm btn-primary" @click="saveSpacePassword" :disabled="!editPasswordValue.trim() || editPasswordValue === selectedSpacePassword" style="padding:0.3rem 0.6rem;">Save</button>
+                    <button class="btn btn-sm btn-secondary" @click="editingPassword = false" style="padding:0.3rem 0.5rem;">&#10005;</button>
+                  </div>
+                </template>
+              </div>
+              <template x-if="passwordSaveResult">
+                <span class="text-small" :style="'color:rgb(var(--' + (passwordSaveError ? 'danger' : 'success') + '));'" x-text="passwordSaveResult"></span>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="spaceId && gallerySlug && eventSlug">
+            <p class="text-small" style="margin-top:0.75rem;color:rgb(var(--success));">Ready to upload photos</p>
+          </template>
+        </div>
+
+        <!-- Drop zone -->
+        <div
+          class="upload-area"
+          :class="{ dragover: isDragging && spaceId && gallerySlug && eventSlug }"
+          :style="!(spaceId && gallerySlug && eventSlug) ? 'opacity:0.35;pointer-events:none;filter:grayscale(1);' : ''"
+          @click="if (spaceId && gallerySlug && eventSlug) $refs.fileInput.click()"
+          @dragover.prevent="if (spaceId && gallerySlug && eventSlug) isDragging = true"
+          @dragleave.prevent="isDragging = false"
+          @drop.prevent="if (spaceId && gallerySlug && eventSlug) handleDrop($event); isDragging = false;"
+        >
+          <div class="upload-icon">&#128228;</div>
+          <p class="text-body" x-text="(spaceId && gallerySlug && eventSlug) ? 'Drop photos here or click to browse' : 'Select a space, gallery, and event above to upload'"></p>
+          <p class="text-small" style="margin-top:0.5rem;">Supports JPEG, PNG, HEIC, and Sony ARW (RAW) files</p>
+          <input
+            type="file"
+            x-ref="fileInput"
+            accept="image/*,.arw,.ARW,.cr2,.CR2,.nef,.NEF,.dng,.DNG"
+            multiple
+            style="display:none"
+            @change="handleFileSelect($event)"
+          >
+        </div>
+
+        <!-- Upload queue -->
+        <template x-if="queue.length > 0">
+          <div style="margin-top:1.5rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+              <h3 class="text-heading" x-text="'Upload Queue (' + queue.length + ' files)'"></h3>
+              <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-primary btn-sm" @click="startUpload" :disabled="uploading || !spaceId || !gallerySlug || !eventSlug">
+                  <span x-text="uploading ? 'Uploading...' : 'Upload All'"></span>
+                </button>
+                <button class="btn btn-secondary btn-sm" @click="queue = []" :disabled="uploading">Clear</button>
+              </div>
+            </div>
+
+            <!-- Overall progress -->
+            <template x-if="uploading">
+              <div class="upload-progress">
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.375rem;">
+                  <span class="text-small" x-text="uploadStatus"></span>
+                  <span class="text-small" x-text="uploadedCount + '/' + queue.length"></span>
+                </div>
+                <div class="progress-bar">
+                  <div class="fill" :style="'width:' + Math.round((uploadedCount / queue.length) * 100) + '%'"></div>
+                </div>
+              </div>
+            </template>
+
+            <!-- File list -->
+            <div style="margin-top:1rem;max-height:400px;overflow-y:auto;">
+              <template x-for="(item, idx) in queue" :key="idx">
+                <div class="surface" style="padding:0.75rem 1rem;margin-bottom:0.375rem;display:flex;align-items:center;justify-content:space-between;">
+                  <div style="display:flex;align-items:center;gap:0.75rem;min-width:0;">
+                    <template x-if="item.thumbUrl">
+                      <img :src="item.thumbUrl" style="width:48px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    </template>
+                    <template x-if="!item.thumbUrl">
+                      <div style="width:48px;height:48px;background:rgb(var(--bg-elevated));border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;" class="text-small">RAW</div>
+                    </template>
+                    <div style="min-width:0;">
+                      <div class="text-body" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="item.file.name"></div>
+                      <div class="text-small" x-text="formatSize(item.file.size) + (item.isRaw ? ' (RAW - will convert)' : '')"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span x-show="item.status === 'pending'" class="text-small">Pending</span>
+                    <span x-show="item.status === 'skip'" class="text-small" style="opacity:0.5;">Skip (duplicate)</span>
+                    <span x-show="item.status === 'converting'" class="text-small text-accent">Converting...</span>
+                    <span x-show="item.status === 'uploading'" class="text-small text-accent">Uploading...</span>
+                    <span x-show="item.status === 'done'" class="text-small" style="color:rgb(var(--success));">Done</span>
+                    <span x-show="item.status === 'error'" class="text-small" style="color:rgb(var(--danger));" x-text="item.error || 'Error'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <script src="/js/upload.js"></script>
+</body>
+</html>

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gallery</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    .pswp--slideshow .pswp__container {
+      transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+  </style>
+</head>
+<body x-data="galleryApp()" x-init="init()">
+
+  <!-- Header -->
+  <div class="container">
+    <header class="site-header">
+      <a href="/gallery.html" class="site-title" x-text="siteName"></a>
+      <div class="header-actions">
+        <button class="btn btn-sm btn-secondary" @click="logout">Log Out</button>
+      </div>
+    </header>
+
+    <!-- Breadcrumbs -->
+    <nav class="breadcrumbs" x-show="view !== 'galleries'">
+      <a href="#" @click.prevent="navigateTo('galleries')" x-text="spaceName || 'Galleries'"></a>
+      <template x-if="currentGallery">
+        <span>
+          <span class="separator">/</span>
+          <template x-if="view === 'events'">
+            <span class="current" x-text="currentGallery.title"></span>
+          </template>
+          <template x-if="view === 'photos'">
+            <a href="#" @click.prevent="navigateTo('events', currentGallery.slug)" x-text="currentGallery.title"></a>
+          </template>
+        </span>
+      </template>
+      <template x-if="currentEvent && view === 'photos'">
+        <span>
+          <span class="separator">/</span>
+          <span class="current" x-text="currentEvent.title"></span>
+        </span>
+      </template>
+    </nav>
+
+    <!-- Gallery List -->
+    <template x-if="view === 'galleries'">
+      <div class="fade-in">
+        <h2 class="text-title" style="margin-bottom:1rem;">Select a Gallery to View</h2>
+        <template x-if="galleries.length === 0 && !loadingData">
+          <div class="empty-state">
+            <div class="empty-icon">&#128247;</div>
+            <p>No galleries yet</p>
+          </div>
+        </template>
+        <div class="gallery-grid">
+          <template x-for="g in galleries" :key="g.slug">
+            <div class="gallery-card card" @click="navigateTo('events', g.slug)" style="display:flex;align-items:center;gap:0.75rem;padding:1rem 1.25rem;cursor:pointer;">
+              <div style="min-width:0;flex:1;">
+                <div class="gallery-title" x-text="g.title"></div>
+                <div class="gallery-desc" x-text="g.description || ''"></div>
+                <div class="text-small" style="color:rgb(var(--text-muted));margin-top:0.125rem;" x-text="(g.eventCount || 0) + ' events'"></div>
+              </div>
+              <div style="display:flex;gap:3px;flex-shrink:0;">
+                <template x-for="pv in g.previews" :key="pv.photoId">
+                  <img :src="'/api/photo/' + g.slug + '/' + pv.eventSlug + '/' + pv.photoId + '/thumb'" loading="lazy" alt="" style="width:36px;height:48px;object-fit:cover;border-radius:3px;background:rgb(var(--bg-elevated));">
+                </template>
+                <template x-if="!g.previews || g.previews.length === 0">
+                  <div style="width:36px;height:48px;border-radius:3px;background:rgb(var(--bg-elevated));display:flex;align-items:center;justify-content:center;color:rgb(var(--text-muted));font-size:0.875rem;">&#128247;</div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- Event List -->
+    <template x-if="view === 'events'">
+      <div class="fade-in">
+        <h2 class="text-title" style="margin-bottom:0.25rem;" x-text="currentGallery?.title"></h2>
+        <template x-if="currentGallery?.description">
+          <p class="text-body" style="margin-bottom:0.5rem;" x-text="currentGallery.description"></p>
+        </template>
+        <p class="text-small" style="margin-bottom:1rem;color:rgb(var(--text-muted));">Select an Event to View</p>
+        <template x-if="events.length === 0 && !loadingData">
+          <div class="empty-state">
+            <div class="empty-icon">&#128197;</div>
+            <p>No events in this gallery</p>
+          </div>
+        </template>
+        <div class="event-grid">
+          <template x-for="e in events" :key="e.slug">
+            <div class="event-card card" @click="navigateTo('photos', currentGallery.slug, e.slug)" style="display:flex;align-items:center;gap:0.75rem;padding:1rem 1.25rem;cursor:pointer;">
+              <div style="min-width:0;flex:1;">
+                <div class="event-title" x-text="e.title"></div>
+                <div class="event-date" x-text="e.date || ''"></div>
+                <div style="color:rgb(var(--text-muted));margin-top:0.125rem;font-size:0.6875rem;" x-text="(e.photoCount || 0) + ' pics'"></div>
+              </div>
+              <div style="display:flex;gap:3px;flex-shrink:0;">
+                <template x-for="pid in e.previews" :key="pid">
+                  <img :src="'/api/photo/' + currentGallery.slug + '/' + e.slug + '/' + pid + '/thumb'" loading="lazy" alt="" style="width:36px;height:48px;object-fit:cover;border-radius:3px;background:rgb(var(--bg-elevated));">
+                </template>
+                <template x-if="!e.previews || e.previews.length === 0">
+                  <div style="width:36px;height:48px;border-radius:3px;background:rgb(var(--bg-elevated));display:flex;align-items:center;justify-content:center;color:rgb(var(--text-muted));font-size:0.875rem;">&#128248;</div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- Photo Grid -->
+    <template x-if="view === 'photos'">
+      <div class="fade-in">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+          <h2 class="text-title" x-text="(currentEvent?.title || '') + (currentEvent?.date ? ' — ' + currentEvent.date : '')"></h2>
+          <div style="display:flex;align-items:center;gap:0.75rem;">
+            <span class="text-small" x-text="photos.length + ' photos'"></span>
+            <button class="btn btn-sm btn-secondary" style="padding:0.15rem 0.5rem;font-size:1rem;line-height:1;" @click="openSlideshow()" :disabled="photos.length === 0" title="Start slideshow">&#9654;</button>
+            <div style="display:flex;align-items:center;gap:0.25rem;user-select:none;">
+              <button class="btn btn-sm btn-secondary" style="padding:0.15rem 0.5rem;font-size:1rem;line-height:1;" @click="zoomIn()" :disabled="thumbSize >= 640" title="Larger thumbnails">&plus;</button>
+              <button class="btn btn-sm btn-secondary" style="padding:0.15rem 0.4rem;font-size:1rem;line-height:1;" @click="zoomReset()" title="Reset zoom" :style="thumbSize === 240 ? 'opacity:0.4' : ''">/</button>
+              <button class="btn btn-sm btn-secondary" style="padding:0.15rem 0.5rem;font-size:1rem;line-height:1;" @click="zoomOut()" :disabled="thumbSize <= 80" title="Smaller thumbnails">&minus;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selection toolbar -->
+        <template x-if="selectedPhotos.size > 0">
+          <div class="surface" style="padding:0.5rem 1rem;margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between;border-radius:6px;">
+            <span class="text-small" x-text="selectedPhotos.size + ' selected'"></span>
+            <div style="display:flex;gap:0.5rem;">
+              <button class="btn btn-sm btn-secondary" @click="selectAll()">Select All</button>
+              <button class="btn btn-sm btn-secondary" @click="clearSelection()">Clear</button>
+              <button class="btn btn-sm btn-primary" @click="downloadSelected()">Download</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Loading skeleton -->
+        <template x-if="loadingData">
+          <div class="photo-grid">
+            <template x-for="i in 12">
+              <div class="photo-thumb skeleton" style="aspect-ratio:3/4;"></div>
+            </template>
+          </div>
+        </template>
+
+        <template x-if="!loadingData && photos.length === 0">
+          <div class="empty-state">
+            <div class="empty-icon">&#128248;</div>
+            <p>No photos in this event</p>
+          </div>
+        </template>
+
+        <div class="photo-grid photo-grid--full" x-show="!loadingData && photos.length > 0" id="photo-grid" :style="'--thumb-size:' + thumbSize + 'px'">
+          <template x-for="(p, idx) in visiblePhotos" :key="p.id">
+            <div class="photo-thumb" :class="{ 'photo-selected': selectedPhotos.has(p.id) }" @click="handlePhotoClick($event, idx, p)">
+              <img
+                :src="photoThumbUrl(p)"
+                loading="lazy"
+                :alt="p.caption || p.filename"
+                @load="handleThumbLoad($event)"
+                @error="handleThumbError($event)"
+              >
+              <div class="photo-check" x-show="selectedPhotos.has(p.id)">&#10003;</div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Load-more sentinel -->
+        <template x-if="!loadingData && photosVisible < photos.length">
+          <div x-intersect:enter="showMorePhotos()" style="padding:2rem;text-align:center;">
+            <button class="btn btn-sm btn-secondary" @click="showMorePhotos()">Load more photos</button>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- Loading overlay -->
+    <template x-if="loadingData && view !== 'photos'">
+      <div style="text-align:center;padding:4rem;">
+        <p class="text-body">Loading...</p>
+      </div>
+    </template>
+  </div>
+
+  <script>
+    function galleryApp() {
+      return {
+        siteName: 'Gallery',
+        spaceName: '',
+        spaceId: null,
+        view: 'galleries', // 'galleries' | 'events' | 'photos'
+        loadingData: false,
+
+        galleries: [],
+        events: [],
+        photos: [],
+        photosVisible: 0,
+        photoBatchSize: 20,
+
+        currentGallery: null,
+        currentEvent: null,
+
+        lightbox: null,
+        thumbSize: parseInt(localStorage.getItem('rg_thumbSize')) || 240,
+        selectedPhotos: new Set(),
+        scrollTarget: null,
+        _scrollTimer: null,
+
+        get visiblePhotos() {
+          return this.photos.slice(0, this.photosVisible);
+        },
+
+        async init() {
+          const res = await fetch('/api/session');
+          const data = await res.json();
+          if (!data.authenticated) {
+            if (window.location.hash) {
+              sessionStorage.setItem('rg_returnHash', window.location.hash);
+            }
+            window.location.href = '/';
+            return;
+          }
+
+          setTimeout(() => this.logout(), 60 * 60 * 1000);
+          this.spaceId = data.spaceId;
+          this.spaceName = data.spaceName || 'Gallery';
+          this.siteName = data.siteName || 'Gallery';
+          document.title = this.siteName;
+
+          this.handlePopState();
+          window.addEventListener('popstate', () => this.handlePopState());
+          window.addEventListener('scroll', () => this.trackScrollPosition(), { passive: true });
+        },
+
+        parseHash() {
+          const raw = window.location.hash.slice(1);
+          const atIdx = raw.indexOf('@');
+          let path = raw;
+          let scrollIdx = null;
+          if (atIdx !== -1) {
+            scrollIdx = parseInt(raw.slice(atIdx + 1), 10);
+            if (isNaN(scrollIdx)) scrollIdx = null;
+            path = raw.slice(0, atIdx);
+          }
+          const parts = path.split('/').filter(Boolean);
+          return { parts, scrollIdx };
+        },
+
+        handlePopState() {
+          const { parts, scrollIdx } = this.parseHash();
+          this.scrollTarget = scrollIdx;
+
+          if (parts.length === 0) {
+            this.loadGalleries();
+          } else if (parts.length === 1) {
+            this.loadEvents(parts[0]);
+          } else if (parts.length === 2) {
+            this.loadPhotos(parts[0], parts[1]);
+          }
+        },
+
+        trackScrollPosition() {
+          if (this.view !== 'photos' || this.photos.length === 0) return;
+          clearTimeout(this._scrollTimer);
+          this._scrollTimer = setTimeout(() => {
+            const grid = document.getElementById('photo-grid');
+            if (!grid) return;
+            const children = grid.querySelectorAll('.photo-thumb');
+            let firstVisible = 0;
+            for (let i = 0; i < children.length; i++) {
+              const rect = children[i].getBoundingClientRect();
+              if (rect.bottom > 0) {
+                firstVisible = i;
+                break;
+              }
+            }
+            if (firstVisible <= 0) return;
+            const base = `${this.currentGallery?.slug || ''}/${this.currentEvent?.slug || ''}`;
+            const newHash = `#${base}@${firstVisible}`;
+            if (window.location.hash !== newHash) {
+              history.replaceState(null, '', newHash);
+            }
+          }, 300);
+        },
+
+        scrollToPhoto(idx) {
+          this.$nextTick(() => {
+            const grid = document.getElementById('photo-grid');
+            if (!grid) return;
+            const children = grid.querySelectorAll('.photo-thumb');
+            if (children[idx]) {
+              children[idx].scrollIntoView({ behavior: 'instant', block: 'start' });
+            }
+          });
+        },
+
+        navigateTo(view, gallerySlug, eventSlug) {
+          this.scrollTarget = null;
+          if (view === 'galleries') {
+            window.location.hash = '';
+            this.loadGalleries();
+          } else if (view === 'events') {
+            window.location.hash = `#${gallerySlug}`;
+            this.loadEvents(gallerySlug);
+          } else if (view === 'photos') {
+            window.location.hash = `#${gallerySlug}/${eventSlug}`;
+            this.loadPhotos(gallerySlug, eventSlug);
+          }
+        },
+
+        async loadGalleries() {
+          this.view = 'galleries';
+          this.loadingData = true;
+          try {
+            const res = await fetch('/api/galleries');
+            const data = await res.json();
+            this.galleries = (data.galleries || []).sort((a, b) =>
+              a.title.localeCompare(b.title)
+            );
+          } catch (e) {
+            console.error('Failed to load galleries:', e);
+          } finally {
+            this.loadingData = false;
+          }
+        },
+
+        async loadEvents(gallerySlug) {
+          this.view = 'events';
+          this.loadingData = true;
+          try {
+            const res = await fetch(`/api/galleries/${gallerySlug}/events`);
+            const data = await res.json();
+            this.currentGallery = data.gallery;
+            this.events = (data.events || []).sort((a, b) => {
+              if (a.date && b.date) return a.date.localeCompare(b.date);
+              if (a.date) return -1;
+              if (b.date) return 1;
+              return a.title.localeCompare(b.title);
+            });
+          } catch (e) {
+            console.error('Failed to load events:', e);
+          } finally {
+            this.loadingData = false;
+          }
+        },
+
+        async loadPhotos(gallerySlug, eventSlug) {
+          this.view = 'photos';
+          this.loadingData = true;
+          this.photosVisible = 0;
+          this.selectedPhotos = new Set();
+          let pendingScroll = null;
+          try {
+            const fetches = [
+              fetch(`/api/galleries/${gallerySlug}/events/${eventSlug}/photos`),
+            ];
+            if (!this.currentGallery || this.currentGallery.slug !== gallerySlug) {
+              fetches.push(fetch(`/api/galleries/${gallerySlug}/events`));
+            }
+
+            const [photosRes, galleryRes] = await Promise.all(fetches);
+            const data = await photosRes.json();
+
+            if (galleryRes) {
+              const gData = await galleryRes.json();
+              this.currentGallery = gData.gallery;
+            }
+
+            this.currentEvent = data.event;
+            this.photos = (data.photos || []).sort((a, b) =>
+              (a.filename || '').localeCompare(b.filename || '')
+            );
+            pendingScroll = (this.scrollTarget != null && this.scrollTarget > 0)
+              ? this.scrollTarget : null;
+
+            if (pendingScroll != null) {
+              this.photosVisible = Math.min(pendingScroll + this.photoBatchSize, this.photos.length);
+            } else {
+              this.photosVisible = Math.min(this.photoBatchSize, this.photos.length);
+            }
+            this.scrollTarget = null;
+          } catch (e) {
+            console.error('Failed to load photos:', e);
+          } finally {
+            this.loadingData = false;
+            if (pendingScroll != null) {
+              this.$nextTick(() => this.scrollToPhoto(pendingScroll));
+            }
+          }
+        },
+
+        showMorePhotos() {
+          this.photosVisible = Math.min(this.photosVisible + this.photoBatchSize, this.photos.length);
+        },
+
+        zoomIn() {
+          this.thumbSize = Math.min(this.thumbSize + 40, 640);
+          localStorage.setItem('rg_thumbSize', this.thumbSize);
+        },
+
+        zoomOut() {
+          this.thumbSize = Math.max(this.thumbSize - 40, 80);
+          localStorage.setItem('rg_thumbSize', this.thumbSize);
+        },
+
+        zoomReset() {
+          this.thumbSize = 240;
+          localStorage.setItem('rg_thumbSize', this.thumbSize);
+        },
+
+        photoThumbUrl(photo) {
+          if (!this.currentGallery || !this.currentEvent) return '';
+          return `/api/photo/${this.currentGallery.slug}/${this.currentEvent.slug}/${photo.id}/thumb`;
+        },
+
+        photoViewUrl(photo, width) {
+          if (!this.currentGallery || !this.currentEvent) return '';
+          const base = `/api/photo/${this.currentGallery.slug}/${this.currentEvent.slug}/${photo.id}`;
+          return width ? `${base}?w=${width}` : base;
+        },
+
+        handleThumbError(event) {
+          event.target.style.opacity = '0';
+        },
+
+        handleThumbLoad(event) {
+          event.target.style.opacity = '';
+        },
+
+        handlePhotoClick(event, idx, photo) {
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            if (this.selectedPhotos.has(photo.id)) {
+              this.selectedPhotos.delete(photo.id);
+            } else {
+              this.selectedPhotos.add(photo.id);
+            }
+            this.selectedPhotos = new Set(this.selectedPhotos);
+            return;
+          }
+          if (this.selectedPhotos.size > 0) {
+            if (this.selectedPhotos.has(photo.id)) {
+              this.selectedPhotos.delete(photo.id);
+            } else {
+              this.selectedPhotos.add(photo.id);
+            }
+            this.selectedPhotos = new Set(this.selectedPhotos);
+            return;
+          }
+          this.openLightbox(idx);
+        },
+
+        selectAll() {
+          this.selectedPhotos = new Set(this.photos.map(p => p.id));
+        },
+
+        clearSelection() {
+          this.selectedPhotos = new Set();
+        },
+
+        downloadSelected() {
+          for (const photo of this.photos) {
+            if (!this.selectedPhotos.has(photo.id)) continue;
+            const url = photo.originalKey
+              ? `/api/photo/${this.currentGallery.slug}/${this.currentEvent.slug}/${photo.id}/original`
+              : this.photoViewUrl(photo);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = photo.filename || photo.id;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+        },
+
+        async openSlideshow() {
+          await this.openLightbox(0, true);
+        },
+
+        async openLightbox(index, autoSlideshow) {
+          const self = this;
+          const items = this.photos.map((p) => ({
+            src: self.photoViewUrl(p),
+            msrc: self.photoThumbUrl(p),
+            width: p.width || 1920,
+            height: p.height || 1280,
+            alt: p.caption || p.filename,
+            originalUrl: p.originalKey
+              ? `/api/photo/${self.currentGallery.slug}/${self.currentEvent.slug}/${p.id}/original`
+              : null,
+          }));
+
+          const [{ default: PhotoSwipeLightbox }, { default: PhotoSwipe }] = await Promise.all([
+            import('https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe-lightbox.esm.min.js'),
+            import('https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe.esm.min.js'),
+          ]);
+
+          const lightbox = new PhotoSwipeLightbox({
+            dataSource: items,
+            pswpModule: PhotoSwipe,
+            bgOpacity: 0.95,
+            padding: { top: 20, bottom: 20, left: 0, right: 0 },
+            closeOnVerticalDrag: true,
+            pinchToClose: true,
+          });
+
+          let slideshowTimer = null;
+          const slideshowDelay = 6000;
+
+          let slideshowAdvancing = false;
+
+          function stopSlideshow(btn, pswp) {
+            if (slideshowTimer) {
+              clearInterval(slideshowTimer);
+              slideshowTimer = null;
+            }
+            slideshowAdvancing = false;
+            if (pswp && pswp.element) {
+              pswp.element.classList.remove('pswp--slideshow');
+            }
+            if (btn) {
+              btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+              btn.title = 'Start slideshow';
+            }
+          }
+
+          function startSlideshow(pswp, btn) {
+            stopSlideshow(btn, pswp);
+            btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>';
+            btn.title = 'Pause slideshow';
+            slideshowTimer = setInterval(() => {
+              slideshowAdvancing = true;
+              pswp.element.classList.add('pswp--slideshow');
+              if (pswp.currIndex < pswp.getNumItems() - 1) {
+                pswp.next();
+              } else {
+                pswp.element.classList.remove('pswp--slideshow');
+                pswp.goTo(0);
+                requestAnimationFrame(() => {
+                  if (slideshowAdvancing) pswp.element.classList.add('pswp--slideshow');
+                });
+              }
+              setTimeout(() => {
+                slideshowAdvancing = false;
+                pswp.element.classList.remove('pswp--slideshow');
+              }, 1300);
+            }, slideshowDelay);
+          }
+
+          let slideshowBtnEl = null;
+
+          lightbox.on('uiRegister', function() {
+            lightbox.pswp.ui.registerElement({
+              name: 'slideshow-button',
+              order: 7,
+              isButton: true,
+              html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+              onInit: (el, pswp) => {
+                slideshowBtnEl = el;
+                el.style.color = '#fff';
+                el.title = 'Start slideshow';
+                el.addEventListener('click', () => {
+                  if (slideshowTimer) {
+                    stopSlideshow(el, pswp);
+                  } else {
+                    startSlideshow(pswp, el);
+                  }
+                });
+                pswp.on('close', () => stopSlideshow(el, pswp));
+
+                if (autoSlideshow) {
+                  startSlideshow(pswp, el);
+                }
+              },
+            });
+
+            lightbox.pswp.ui.registerElement({
+              name: 'download-button',
+              order: 8,
+              isButton: true,
+              tagName: 'a',
+              html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+              onInit: (el, pswp) => {
+                el.setAttribute('download', '');
+                el.setAttribute('target', '_blank');
+                el.style.color = '#fff';
+                el.style.textDecoration = 'none';
+                el.style.display = 'flex';
+                el.style.alignItems = 'center';
+                el.style.justifyContent = 'center';
+                el.style.width = '50px';
+                el.style.height = '60px';
+                el.style.cursor = 'pointer';
+                pswp.on('change', () => {
+                  const item = pswp.currSlide.data;
+                  el.href = item.originalUrl || item.src;
+                });
+              },
+            });
+          });
+
+          lightbox.on('afterInit', function() {
+            const pswp = lightbox.pswp;
+
+            // Override the zoom button to target top 1/3 center
+            const zoomBtn = pswp.element.querySelector('.pswp__button--zoom');
+            if (zoomBtn) {
+              zoomBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const slide = pswp.currSlide;
+                if (!slide) return;
+                if (slide.currZoomLevel <= slide.zoomLevels.initial) {
+                  slide.zoomTo(
+                    slide.zoomLevels.secondary,
+                    { x: pswp.viewportSize.x / 2, y: pswp.viewportSize.y / 3 },
+                    300
+                  );
+                } else {
+                  slide.zoomTo(slide.zoomLevels.initial, { x: 0, y: 0 }, 300);
+                }
+              }, true);
+            }
+
+            // Also handle double-tap zoom to top 1/3
+            pswp.on('doubleTap', (e) => {
+              const slide = pswp.currSlide;
+              if (!slide) return;
+              e.preventDefault();
+              if (slide.currZoomLevel <= slide.zoomLevels.initial) {
+                slide.zoomTo(
+                  slide.zoomLevels.secondary,
+                  { x: pswp.viewportSize.x / 2, y: pswp.viewportSize.y / 3 },
+                  300
+                );
+              } else {
+                slide.zoomTo(slide.zoomLevels.initial, { x: 0, y: 0 }, 300);
+              }
+            });
+          });
+
+          lightbox.init();
+          lightbox.loadAndOpen(index);
+        },
+
+        async logout() {
+          await fetch('/api/logout', { method: 'POST' });
+          window.location.href = '/';
+        },
+      };
+    }
+  </script>
+</body>
+</html>

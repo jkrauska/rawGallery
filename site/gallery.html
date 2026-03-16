@@ -159,6 +159,16 @@
           </div>
         </template>
 
+        <!-- Show earlier photos link -->
+        <template x-if="!loadingData && photoStart > 0">
+          <div style="text-align:center;padding:0.75rem 0;">
+            <button class="btn btn-sm btn-secondary" @click="showEarlierPhotos()">
+              &larr; Show all from start
+            </button>
+            <span class="text-small" style="margin-left:0.5rem;color:rgb(var(--text-muted));" x-text="'Starting from photo ' + (photoStart + 1) + ' of ' + photos.length"></span>
+          </div>
+        </template>
+
         <div class="photo-grid photo-grid--full" x-show="!loadingData && photos.length > 0" id="photo-grid" :style="'--thumb-size:' + thumbSize + 'px'">
           <template x-for="(p, idx) in visiblePhotos" :key="p.id">
             <div class="photo-thumb" :class="{ 'photo-selected': selectedPhotos.has(p.id) }" @click="handlePhotoClick($event, idx, p)">
@@ -175,7 +185,7 @@
         </div>
 
         <!-- Load-more sentinel -->
-        <template x-if="!loadingData && photosVisible < photos.length">
+        <template x-if="!loadingData && (photoStart + photosVisible) < photos.length">
           <div x-intersect:enter="showMorePhotos()" style="padding:2rem;text-align:center;">
             <button class="btn btn-sm btn-secondary" @click="showMorePhotos()">Load more photos</button>
           </div>
@@ -212,11 +222,11 @@
         lightbox: null,
         thumbSize: parseInt(localStorage.getItem('rg_thumbSize')) || 240,
         selectedPhotos: new Set(),
-        scrollTarget: null,
+        photoStart: 0,
         _scrollTimer: null,
 
         get visiblePhotos() {
-          return this.photos.slice(0, this.photosVisible);
+          return this.photos.slice(this.photoStart, this.photoStart + this.photosVisible);
         },
 
         async init() {
@@ -245,26 +255,24 @@
           const raw = window.location.hash.slice(1);
           const atIdx = raw.indexOf('@');
           let path = raw;
-          let scrollIdx = null;
+          let startIdx = 0;
           if (atIdx !== -1) {
-            scrollIdx = parseInt(raw.slice(atIdx + 1), 10);
-            if (isNaN(scrollIdx)) scrollIdx = null;
+            startIdx = parseInt(raw.slice(atIdx + 1), 10) || 0;
             path = raw.slice(0, atIdx);
           }
           const parts = path.split('/').filter(Boolean);
-          return { parts, scrollIdx };
+          return { parts, startIdx };
         },
 
         handlePopState() {
-          const { parts, scrollIdx } = this.parseHash();
-          this.scrollTarget = scrollIdx;
+          const { parts, startIdx } = this.parseHash();
 
           if (parts.length === 0) {
             this.loadGalleries();
           } else if (parts.length === 1) {
             this.loadEvents(parts[0]);
           } else if (parts.length === 2) {
-            this.loadPhotos(parts[0], parts[1]);
+            this.loadPhotos(parts[0], parts[1], startIdx);
           }
         },
 
@@ -275,36 +283,31 @@
             const grid = document.getElementById('photo-grid');
             if (!grid) return;
             const children = grid.querySelectorAll('.photo-thumb');
-            let firstVisible = 0;
+            let firstVisibleRel = 0;
             for (let i = 0; i < children.length; i++) {
               const rect = children[i].getBoundingClientRect();
               if (rect.bottom > 0) {
-                firstVisible = i;
+                firstVisibleRel = i;
                 break;
               }
             }
-            if (firstVisible <= 0) return;
+            const absoluteIdx = this.photoStart + firstVisibleRel;
             const base = `${this.currentGallery?.slug || ''}/${this.currentEvent?.slug || ''}`;
-            const newHash = `#${base}@${firstVisible}`;
+            const newHash = absoluteIdx > 0 ? `#${base}@${absoluteIdx}` : `#${base}`;
             if (window.location.hash !== newHash) {
               history.replaceState(null, '', newHash);
             }
           }, 300);
         },
 
-        scrollToPhoto(idx) {
-          this.$nextTick(() => {
-            const grid = document.getElementById('photo-grid');
-            if (!grid) return;
-            const children = grid.querySelectorAll('.photo-thumb');
-            if (children[idx]) {
-              children[idx].scrollIntoView({ behavior: 'instant', block: 'start' });
-            }
-          });
+        showEarlierPhotos() {
+          this.photoStart = 0;
+          this.photosVisible = Math.min(this.photoBatchSize, this.photos.length);
+          const base = `${this.currentGallery?.slug || ''}/${this.currentEvent?.slug || ''}`;
+          history.replaceState(null, '', `#${base}`);
         },
 
         navigateTo(view, gallerySlug, eventSlug) {
-          this.scrollTarget = null;
           if (view === 'galleries') {
             window.location.hash = '';
             this.loadGalleries();
@@ -353,12 +356,12 @@
           }
         },
 
-        async loadPhotos(gallerySlug, eventSlug) {
+        async loadPhotos(gallerySlug, eventSlug, startIdx) {
           this.view = 'photos';
           this.loadingData = true;
           this.photosVisible = 0;
+          this.photoStart = 0;
           this.selectedPhotos = new Set();
-          let pendingScroll = null;
           try {
             const fetches = [
               fetch(`/api/galleries/${gallerySlug}/events/${eventSlug}/photos`),
@@ -379,27 +382,17 @@
             this.photos = (data.photos || []).sort((a, b) =>
               (a.filename || '').localeCompare(b.filename || '')
             );
-            pendingScroll = (this.scrollTarget != null && this.scrollTarget > 0)
-              ? this.scrollTarget : null;
-
-            if (pendingScroll != null) {
-              this.photosVisible = Math.min(pendingScroll + this.photoBatchSize, this.photos.length);
-            } else {
-              this.photosVisible = Math.min(this.photoBatchSize, this.photos.length);
-            }
-            this.scrollTarget = null;
+            this.photoStart = Math.min(startIdx || 0, Math.max(0, this.photos.length - 1));
+            this.photosVisible = Math.min(this.photoBatchSize, this.photos.length - this.photoStart);
           } catch (e) {
             console.error('Failed to load photos:', e);
           } finally {
             this.loadingData = false;
-            if (pendingScroll != null) {
-              this.$nextTick(() => this.scrollToPhoto(pendingScroll));
-            }
           }
         },
 
         showMorePhotos() {
-          this.photosVisible = Math.min(this.photosVisible + this.photoBatchSize, this.photos.length);
+          this.photosVisible = Math.min(this.photosVisible + this.photoBatchSize, this.photos.length - this.photoStart);
         },
 
         zoomIn() {
@@ -456,7 +449,7 @@
             this.selectedPhotos = new Set(this.selectedPhotos);
             return;
           }
-          this.openLightbox(idx);
+          this.openLightbox(this.photoStart + idx);
         },
 
         selectAll() {
